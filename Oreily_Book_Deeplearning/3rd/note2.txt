@@ -1,0 +1,157 @@
+part2
+
+手書き数字認識
+  学習済みのパラメータを使ってニュー立つネットワークの「推論処理」だけを実装
+  この推論処理を、ニューラルネットワークの順方向伝播(forward propagation)ともいう
+
+MNISTデータセット
+  ここで使用するデータセットはMINSTという手書き数字の画像セット
+  ー＞機械学習の分野で最も有名なデータセットの１つ
+      ０−９までの数字画像から構成されている。
+        訓練画像・・・60000枚
+        テスト画像・・・10000枚
+      それらの画像を使用して学習と推論を行う
+        学習したモデルでテスト画像に対してどれだけ正しく分類できるかを計測するのが目的
+
+      画像データ
+        28x28のグレー画像(1チャンネル)
+        各ピクセルは0-255までのを値をとる。
+
+      この本では、https://github.com/oreilly-japan/deep-learning-from-scratch
+      をcloneしてきて、
+      mnist.py・・・MNISTデータセットのダウンロードから画像データのNumpy配列への
+                  変換までをサポートする
+
+                  import sys,os
+                  sys.path.append(os.pardir)  # 親ディレクトリのファイルをインポートするための設定
+                  from dataset.mnist import load_mnist
+
+                  #最初の呼び出しは数分待ちます
+                  (x_train,t_train),(x_test,t_test)=\
+                      load_mnist(flatten=True,normalize=False)
+
+                  #それぞれのデータ形状を出力
+                  print(x_train.shape)
+                  print(t_train.shape)
+                  print(x_test.shape)
+                  print(t_test.shape)
+
+                load_mnist関数
+                  「(訓練画像,訓練ラベル),(テスト画像,テストラベル)」といった形式で
+                  読み込んだmnistデータを返します。
+                  具体的に
+                    load_mnist(normalize=True,flatten=True,one_hot_label=False)
+                      normalize・・・入力画像を0.0-1.0の値に正規化するかどうかを設定
+                                    ー＞Falseとはピクセルが０ー２５５のまま
+                      flatten・・・入力画像を平にする(1次元配列)かどうかを設定
+                      one_hot_label・・・ラベルをone_hot表現にするかどうか設定
+                                        one-hot表現
+                                          例　[0,0,1,0,0,0,0,0]のように正解となるラベルだけが、１でそれ以外が０の配列
+                                        ー＞Falseのとき、７、２といったように単純に正解となるラベルが格納
+
+      データの確認とMINST画像を表示させる
+        ch03/mnist_show.pyを実行すると、、、
+        画像が出力された
+        ch03/mnist_show.pyのソースコード
+
+        # coding: utf-8
+        import sys, os
+        sys.path.append(os.pardir)  # 親ディレクトリのファイルをインポートするための設定
+        import numpy as np
+        from dataset.mnist import load_mnist
+        from PIL import Image
+
+
+        def img_show(img):
+            pil_img = Image.fromarray(np.uint8(img))　#Numpyとして格納された画像データをPIL用のデータオブジェクトに変換している
+            pil_img.show()
+
+        (x_train, t_train), (x_test, t_test) = load_mnist(flatten=True, normalize=False)
+
+        #flatten=True -=>> 読み込んだ画像が１列(１次元)で格納されている。だから、もとの形状に戻す必要がある。
+
+        img = x_train[0]
+        label = t_train[0]
+        print(label)  # 5
+
+        print(img.shape)  # (784,)
+        img = img.reshape(28, 28)  # 形状を元の画像サイズに変形
+        print(img.shape)  # (28, 28)
+
+        img_show(img)
+
+     ニューラルネットワークの推論処理
+      MNISTデータセットに対して、推論処理を行うニューラルネットワークを実装してみよう
+      ネットワークのそれぞれのニューロンの構成
+        入力層・・・784(=28x28)
+        出力層・・・10(0-9の１０クラス)
+        隠れ層・・・２つ(1,50...2,100)この２つは任意
+
+      最初に以下３つを定義する
+      ch03/neuralnet_mnist.py
+
+        def get_data():
+            #(訓練画像,訓練ラベル),(テスト画像,テストラベル)」といった形式で
+            読み込んだmnistデータを返します。
+            (x_train, t_train), (x_test, t_test) = load_mnist(normalize=True, flatten=True, one_hot_label=False)
+            #normalization="正規化" 上の文は入力データに対して正規化している。
+            #このように入力データに何らかの決まった変換を行うことを前処理
+            #(pre-processionfg)
+            return x_test, t_test
+
+
+
+        def init_network():
+            #pickleファイルのsample_weight.pklに保存された学習済みの重みパラメータを読み込む
+            #このファイルには、重みとバイアスのパラメータがディク書なり肩の変数として保存されている
+            with open("sample_weight.pkl", 'rb') as f:
+                network = pickle.load(f)
+            return network
+
+
+        def predict(network, x):
+            #前やったforward関数と同じー＞入力信号が出力へと変換される確率を計算し分類を逐次行う
+            W1, W2, W3 = network['W1'], network['W2'], network['W3']
+            b1, b2, b3 = network['b1'], network['b2'], network['b3']
+
+            a1 = np.dot(x, W1) + b1
+            z1 = sigmoid(a1)
+            a2 = np.dot(z1, W2) + b2
+            z2 = sigmoid(a2)
+            a3 = np.dot(z2, W3) + b3
+            y = softmax(a3)
+
+            return y
+        ここからニューラルネットワークによる推論処理、そして認識精度ーーどれだけ正しく分類できるか
+
+        x, t = get_data()#データ生成
+        network = init_network()#ネットワーク生成
+        accuracy_cnt = 0
+        for i in range(len(x)):#xに格納された画像データを１枚ずつfor文で取り出す
+            y = predict(network, x[i])#分類を一枚一枚行う
+            p= np.argmax(y) # 最も確率の高い要素のインデックスを取得
+            if p == t[i]:#ニューラルネットワークが予測した答えと正解ラベルとを比較して正解割合を認識精度(accuracy)とする
+                accuracy_cnt += 1
+
+        print("Accuracy:" + str(float(accuracy_cnt) / len(x))) #Accuracy:0.9352
+
+        これは93.52%正しく分類できたとなっている。学習方法やニューラルネットワーク構造を
+        工夫すればもっと早くなる。
+
+        バッチ処理 入力データと重みのパラメータの「形状」
+          バッチ・・・まとまりのある入力データ
+          （実装）
+          x, t = get_data()
+          network = init_network()
+          batch_size =100 #バッチの数
+          accuracy_cnt=0
+
+          for i in range(0,len(x),batch_size):
+            x_batch = x[i:i+batch_size]
+            y_batch = predict(network,x_batch)
+            p = p.argmax(y_batch,axis=1)
+            #axis=1とは列での最大の値をとり、その値のindex値を返すようにしている。
+            accuracy_cnt += np.sum(p == t[i:i+batch_size])
+
+          バッチ処理を組み合わせて先ほどのneuralnet_mnist.pyを実行
+          ー＞0.4831秒から0.05323秒に早くなった

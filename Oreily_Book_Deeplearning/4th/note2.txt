@@ -1,0 +1,283 @@
+学習アルゴリズムの実装
+  ニューラルネットワークの学習手順まとめ
+
+  ニューラルネットワーク
+    適応可能な重みとバイアスがある。
+    これらを訓練データに適応するように調整することー＞「学習」
+    学習手順
+      1.ミニバッチ
+        訓練データの中からランダムに一部のデータを選び出す。
+        その選ばれたデータをミニバッチといい、そのミニバッチの損失関数の値を減らすことを目的とする。
+      2.勾配の算出
+        ミニバッチの損失関数を減らすために、各重みパラメータの勾配を求める
+        勾配は、損失関数の値を最も減らす方向を示す。
+      3.パラメータの更新
+        重みパラメータを勾配方向に微小量だけ更新する。
+      4.ステップ1、ステップ2、ステップ3を繰り返す
+
+    ー＞確率的勾配降下法(stochastic gradient descent)
+    勾配降下法によってパラメータを更新する方法ですが、
+    ここで使われるデータはミニバッチとして無作為に選ばれたデータを使用しているから
+    deeplearningのフレームワークの多くでは、これをSGDという名前の関数で実装されるのが一般的
+
+２層ニューラルネットワークのクラス
+  初め、二層ニューラルネットワークを１つのクラスとして実装する
+  ソースコードは、
+    ch04/two_layer_net.py
+      import sys, os
+      sys.path.append(os.pardir)  # 親ディレクトリのファイルをインポートするための設定
+      from common.functions import *
+      from common.gradient import numerical_gradient
+
+      class TwoLayerNet:
+          def __init__(self, input_size, hidden_size, output_size, weight_init_std=0.01):
+              ###
+                上の引数の役割を順に：
+                  入力層のニューロンの数、
+                  隠れ層のニューロンの数、
+                  出力層のニューロンの数。
+                  weight_init_std->重みパラメータ
+                    ー＞どのような値にするかによってNNの学習をさせる上で重要！
+                    次にここをみる！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！
+                    ここでは、重みはガウス分布に従う乱数で初期化
+                    バイアスは０で初期化すると述べる
+              ###
+              # 重みの初期化
+              self.params = {}
+              self.params['W1'] = weight_init_std * np.random.randn(input_size, hidden_size)
+              #１層目の重み
+              self.params['b1'] = np.zeros(hidden_size)
+              #１層目のバイアス
+              self.params['W2'] = weight_init_std * np.random.randn(hidden_size, output_size)
+              self.params['b2'] = np.zeros(output_size)
+              #params・・・ニューラルネットワークのパラメータを保持するディクショナリ変数(instance変数)
+              ###
+                input_size=784, hidden_size=100, output_size=10
+                net.params['W1'].shape #(784,100)
+                net.params['b1'].shape #(100,)
+                net.params['W2'].shape #(100,10)
+                net.params['b2'].shape #(10,)]
+
+                このように、params変数には、このネットワークに必要なパラメータが全て格納されている。
+                そして、その格納された重みパラメータが推論処理(フォワード処理)
+
+                推論処理の仕方
+                  x=np.random.rand(100,784)#ダミー入力データ
+                  y=net.predict(x)
+          ###
+
+          def predict(self, x):
+              ###
+                認識(推論)
+                  引数：画像データ
+              ###
+              W1, W2 = self.params['W1'], self.params['W2']
+              b1, b2 = self.params['b1'], self.params['b2']
+
+              a1 = np.dot(x, W1) + b1
+              z1 = sigmoid(a1)
+              a2 = np.dot(z1, W2) + b2
+              y = softmax(a2)
+
+              return y
+
+          # x:入力データ, t:教師データ
+          def loss(self, x, t):
+              ###
+                損失関数の値を求める。
+                  引数：画像データ、正解ラベル
+              ###
+              y = self.predict(x)
+
+              return cross_entropy_error(y, t)
+
+          def accuracy(self, x, t):
+              #認識精度を求める、
+              y = self.predict(x)
+              y = np.argmax(y, axis=1)
+              t = np.argmax(t, axis=1)
+
+              accuracy = np.sum(y == t) / float(x.shape[0])
+              return accuracy
+
+          # x:入力データ, t:教師データ
+          def numerical_gradient(self, x, t):
+              #重みパラメータに対する勾配を求める
+              loss_W = lambda W: self.loss(x, t)
+
+              grads = {}
+              #grads・・・勾配を保持するディクショナリ変数(numerical_gradient()メソッドの返り値)
+              grads['W1'] = numerical_gradient(loss_W, self.params['W1'])
+              #１層目の重みの勾配
+              grads['b1'] = numerical_gradient(loss_W, self.params['b1'])
+              #１層目のバイアスの勾配
+              grads['W2'] = numerical_gradient(loss_W, self.params['W2'])
+              grads['b2'] = numerical_gradient(loss_W, self.params['b2'])
+
+              ###
+                params変数と対応するように各パラメータの勾配が格納されます。
+                numerical_gradient()メソッドをつかって勾配を計算するとgrads変数に勾配情報が格納されている
+                おのに入力データ784と正解ラベル100(２つともランダム)がgrads変数の形は変わらない。
+              ###
+
+              return grads
+
+          def gradient(self, x, t):
+              #numerical_gradientの高速版
+              ###
+                こいつは誤差逆伝播法によって上の勾配の計算を求めるメソッド
+              ###
+              W1, W2 = self.params['W1'], self.params['W2']
+              b1, b2 = self.params['b1'], self.params['b2']
+              grads = {}
+
+              batch_num = x.shape[0]
+
+              # forward
+              a1 = np.dot(x, W1) + b1
+              z1 = sigmoid(a1)
+              a2 = np.dot(z1, W2) + b2
+              y = softmax(a2)
+
+              # backward
+              dy = (y - t) / batch_num
+              grads['W2'] = np.dot(z1.T, dy)
+              grads['b2'] = np.sum(dy, axis=0)
+
+              da1 = np.dot(dy, W2.T)
+              dz1 = sigmoid_grad(a1) * da1
+              grads['W1'] = np.dot(x.T, dz1)
+              grads['b1'] = np.sum(dz1, axis=0)
+
+              return grads
+
+ミニバッチ学習の実装
+  訓練データから無作為に１部のデータをとりだして、そのミニバッチを対象に勾配法により
+  パラメータを更新する
+  TwoLayerNetクラスを対象に、MINSTデータセットを使って学習しているのが下のSC。
+    ch04/train_neuralnet.py
+    #説明にいらないものは省略しておく
+    import numpy as np
+    from dataset.mnist import load_mnist
+    from two_layer_net import TwoLayerNet
+
+    # データの読み込み
+    (x_train, t_train), (x_test, t_test) = load_mnist(normalize=True, one_hot_label=True)
+
+    network = TwoLayerNet(input_size=784, hidden_size=50, output_size=10)
+
+    train_loss_list = []
+
+    #ハイパーパラメータ
+    iters_num = 10000  # 繰り返しの回数を適宜設定する
+    train_size = x_train.shape[0] 　
+    batch_size = 100  #ミニバッチサイズが１００
+    learning_rate = 0.1
+
+
+    iter_per_epoch = max(train_size / batch_size, 1)
+
+    for i in range(iters_num):
+        #ミニバッチの取得
+        batch_mask = np.random.choice(train_size, batch_size)
+        x_batch = x_train[batch_mask]
+        t_batch = t_train[batch_mask]
+
+        # 勾配の計算 -> 確率勾配降下法(SGD)によりパラメータを更新
+        grad = network.numerical_gradient(x_batch, t_batch)
+        #grad = network.gradient(x_batch, t_batch)#高速版
+
+        # パラメータの更新
+        #更新するごとに、訓練データに対する損失関数を計算し、その値を配列に追加する
+        for key in ('W1', 'b1', 'W2', 'b2'):
+            network.params[key] -= learning_rate * grad[key]
+        #学習経過の記録
+        loss = network.loss(x_batch, t_batch)
+        train_loss_list.append(loss)
+
+    # いかはグラフの描画なので省略
+    これを実行すると、グラフが出てきて、損失関数の値が減っていてる　
+      ー＞　学習がうまくいっていることのサイン
+            ＋
+           ニューラルネットの重みパラメータが徐々にデータに適応している
+
+テストデータで評価
+  上の損失関数は「訓練データのミニバッチに対する損失関数の値」
+  ー＞他のデータセットにも同じ程度の実力を発揮できるかどうかは定かではない。
+
+  NNの学習では訓練データ以外のデータを正しく認識できるかどうかを確認しなければならない
+  ー＞「過学習」を起こしていないかの確認
+
+  そもそも
+  NNの学習の目標
+    汎化能力を身につけること
+  汎化能力を評価するには、訓練データ以外のデータを評価しなければならない
+
+  以下の実装は学習行う過程で定期的に訓練データとテストデータを対象に、
+  認識精度を記録することにします。ここでは
+  １エボックごとに、訓練データとテストデータの認識精度を記録します
+  エボック・・・単位。学習において訓練データを全て使い切ったときの回数に対応
+            　訓練データ/ミニバッチの数=勾配法を繰り返した数=1回ともとらえていい
+
+  うえのsourceを少しだけ修正
+  import numpy as np
+  from dataset.mnist import load_mnist
+  from two_layer_net import TwoLayerNet
+
+  # データの読み込み
+  (x_train, t_train), (x_test, t_test) = load_mnist(normalize=True, one_hot_label=True)
+
+  network = TwoLayerNet(input_size=784, hidden_size=50, output_size=10)
+
+  train_loss_list = []
+  train_acc_list = []
+  test_acc_list = []
+  #1エボックあたりの繰り返し数
+  iter_per_epoch = max(train_size / batch_size, 1)
+
+  #ハイパーパラメータ
+  iters_num = 10000  # 繰り返しの回数を適宜設定する
+  train_size = x_train.shape[0] 　
+  batch_size = 100  #ミニバッチサイズが１００
+  learning_rate = 0.1
+
+
+  iter_per_epoch = max(train_size / batch_size, 1)
+
+  for i in range(iters_num):
+      #ミニバッチの取得
+      batch_mask = np.random.choice(train_size, batch_size)
+      x_batch = x_train[batch_mask]
+      t_batch = t_train[batch_mask]
+
+      # 勾配の計算 -> 確率勾配降下法(SGD)によりパラメータを更新
+      grad = network.numerical_gradient(x_batch, t_batch)
+      #grad = network.gradient(x_batch, t_batch)#高速版
+
+      # パラメータの更新
+      #更新するごとに、訓練データに対する損失関数を計算し、その値を配列に追加する
+      for key in ('W1', 'b1', 'W2', 'b2'):
+          network.params[key] -= learning_rate * grad[key]
+      #学習経過の記録
+      loss = network.loss(x_batch, t_batch)
+      train_loss_list.append(loss)
+
+      #１エボックごとにすべての訓練データとテストデータに対して認識精度を計算
+      """
+        どうして、１エボックごとに認識精度を計算するか？
+          ->for文の繰り返しの中で常に認識精度を計算していては時間がかかってしますから
+            そして、そこまで細かい頻度で認識精度を記録する必要もないからです。
+            (よりおおきな視点でざっくりと認識精度の推移がわかればいいから)
+      """
+      if i % iter_per_epoch == 0:
+          train_acc = network.accuracy(x_train, t_train)
+          test_acc = network.accuracy(x_test, t_test)
+          train_acc_list.append(train_acc)
+          test_acc_list.append(test_acc)
+          print("train acc, test acc | " + str(train_acc) + ", " + str(test_acc))
+
+        # いかはグラフの描画なので省略
+          出力されたグラフからエボックが進むにつれて訓練データとテストデータ
+          をつかって評価した認識精度は両方とも向上した。
+          ＋
+          ２つの認識精度には差がない＝２つの線がほぼ重なっている＝＞過学習が起きていない
